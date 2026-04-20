@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Baby Play">
+  <title>Baby Play</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+ 
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+ 
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      position: fixed;
+      top: 0; left: 0;
+    }
+ 
+    /* Prevent any tap highlights or callouts */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+ 
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+ 
+    let W, H;
+ 
+    function resize() {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+ 
+    // ── Palette ──────────────────────────────────────────────
+    const COLORS = [
+      '#FF3366', '#FF6B35', '#FFD700', '#00FF88',
+      '#00CFFF', '#7B2FFF', '#FF2FD4', '#FF8C00',
+      '#39FF14', '#FF073A', '#0FF0FC', '#FF6EC7'
+    ];
+ 
+    function randColor() {
+      return COLORS[Math.floor(Math.random() * COLORS.length)];
+    }
+ 
+    // ── Flowing streams ──────────────────────────────────────
+    class Stream {
+      constructor() { this.reset(true); }
+ 
+      reset(init = false) {
+        this.x = Math.random() * W;
+        this.y = init ? Math.random() * H : (Math.random() < 0.5 ? -20 : H + 20);
+        this.vx = (Math.random() - 0.5) * 1.5;
+        this.vy = (Math.random() - 0.5) * 1.5;
+        // ensure it's actually moving
+        if (Math.abs(this.vy) < 0.3) this.vy = 0.3 * Math.sign(this.vy || 1);
+        this.color = randColor();
+        this.width = 3 + Math.random() * 8;
+        this.length = 80 + Math.random() * 200;
+        this.alpha = 0.4 + Math.random() * 0.5;
+        this.history = [];
+        this.maxHistory = Math.floor(this.length / 2);
+        this.wobble = Math.random() * Math.PI * 2;
+        this.wobbleSpeed = 0.02 + Math.random() * 0.03;
+        this.wobbleAmp = 0.3 + Math.random() * 0.8;
+      }
+ 
+      update() {
+        this.wobble += this.wobbleSpeed;
+        this.vx += Math.sin(this.wobble) * this.wobbleAmp * 0.05;
+        this.vy += Math.cos(this.wobble * 0.7) * this.wobbleAmp * 0.05;
+ 
+        // soft speed cap
+        const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (speed > 2.5) { this.vx *= 2.5 / speed; this.vy *= 2.5 / speed; }
+ 
+        this.x += this.vx;
+        this.y += this.vy;
+ 
+        this.history.push({ x: this.x, y: this.y });
+        if (this.history.length > this.maxHistory) this.history.shift();
+ 
+        // reset if far off screen
+        if (this.x < -200 || this.x > W + 200 || this.y < -200 || this.y > H + 200) {
+          this.reset();
+        }
+      }
+ 
+      draw() {
+        if (this.history.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(this.history[0].x, this.history[0].y);
+        for (let i = 1; i < this.history.length; i++) {
+          ctx.lineTo(this.history[i].x, this.history[i].y);
+        }
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = this.width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = this.alpha;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = this.width * 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+    }
+ 
+    // ── Particles (touch burst) ───────────────────────────────
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x; this.y = y;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 10;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.color = color;
+        this.alpha = 1;
+        this.size = 4 + Math.random() * 12;
+        this.decay = 0.015 + Math.random() * 0.025;
+        this.gravity = 0.15 + Math.random() * 0.1;
+        this.shape = Math.random() < 0.5 ? 'circle' : 'star';
+      }
+ 
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.vx *= 0.98;
+        this.alpha -= this.decay;
+        this.size *= 0.99;
+      }
+ 
+      draw() {
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.fillStyle = this.color;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = this.size * 1.5;
+ 
+        if (this.shape === 'circle') {
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          drawStar(ctx, this.x, this.y, 5, this.size, this.size * 0.45);
+        }
+ 
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+ 
+      dead() { return this.alpha <= 0; }
+    }
+ 
+    // ── Ring burst ────────────────────────────────────────────
+    class Ring {
+      constructor(x, y, color) {
+        this.x = x; this.y = y;
+        this.color = color;
+        this.radius = 10;
+        this.maxRadius = 80 + Math.random() * 100;
+        this.alpha = 0.8;
+        this.width = 3 + Math.random() * 4;
+      }
+      update() {
+        this.radius += (this.maxRadius - this.radius) * 0.12;
+        this.alpha -= 0.025;
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = this.width;
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 15;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+      dead() { return this.alpha <= 0; }
+    }
+ 
+    function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
+      let rot = (Math.PI / 2) * 3;
+      const step = Math.PI / spikes;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - outerR);
+      for (let i = 0; i < spikes; i++) {
+        ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+        rot += step;
+        ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+        rot += step;
+      }
+      ctx.lineTo(cx, cy - outerR);
+      ctx.closePath();
+      ctx.fill();
+    }
+ 
+    // ── Setup ─────────────────────────────────────────────────
+    const NUM_STREAMS = 18;
+    const streams = Array.from({ length: NUM_STREAMS }, () => new Stream());
+    let particles = [];
+    let rings = [];
+ 
+    function burst(x, y) {
+      const color = randColor();
+      const count = 25 + Math.floor(Math.random() * 25);
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle(x, y, i % 3 === 0 ? randColor() : color));
+      }
+      // 2-3 expanding rings
+      const numRings = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < numRings; i++) {
+        rings.push(new Ring(x, y, i === 0 ? color : randColor()));
+      }
+    }
+ 
+    // ── Touch / mouse input ───────────────────────────────────
+    function handleTouch(e) {
+      e.preventDefault();
+      const touches = e.changedTouches || [e];
+      for (const t of touches) {
+        const rect = canvas.getBoundingClientRect();
+        burst(t.clientX - rect.left, t.clientY - rect.top);
+      }
+    }
+ 
+    canvas.addEventListener('touchstart', handleTouch, { passive: false });
+    canvas.addEventListener('touchmove', handleTouch, { passive: false });
+    canvas.addEventListener('mousedown', handleTouch);
+    canvas.addEventListener('mousemove', (e) => { if (e.buttons) handleTouch(e); });
+ 
+    // Block context menu and double-tap zoom
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('dblclick', e => e.preventDefault());
+ 
+    // ── Render loop ───────────────────────────────────────────
+    function loop() {
+      // Fading trail (not full clear = motion blur effect)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+      ctx.fillRect(0, 0, W, H);
+ 
+      // Draw streams
+      for (const s of streams) {
+        s.update();
+        s.draw();
+      }
+ 
+      // Draw rings
+      rings = rings.filter(r => !r.dead());
+      for (const r of rings) { r.update(); r.draw(); }
+ 
+      // Draw particles
+      particles = particles.filter(p => !p.dead());
+      for (const p of particles) { p.update(); p.draw(); }
+ 
+      requestAnimationFrame(loop);
+    }
+ 
+    loop();
+  </script>
+</body>
+</html>
