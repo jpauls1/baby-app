@@ -375,14 +375,23 @@
     { label: 'C', freq: 523.25, color: '#FF3366' },
   ];
 
-  // Audio context — created lazily on first touch (iOS requires user gesture)
+  // Audio context — iOS requires creation AND resume inside a direct user gesture
   let audioCtx = null;
+
   function getAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Resume if suspended (iOS sometimes suspends it)
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
     return audioCtx;
   }
+
+  // Unlock audio on first touch anywhere on the piano view
+  document.getElementById('piano-view').addEventListener('pointerdown', () => {
+    getAudio();
+  }, { once: false });
 
   // Active notes: pointerId → { osc, gain }
   const activeNotes = new Map();
@@ -391,10 +400,10 @@
     const ac = getAudio();
     const osc = ac.createOscillator();
     const gain = ac.createGain();
-    osc.type = 'sine';
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(freq, ac.currentTime);
     gain.gain.setValueAtTime(0, ac.currentTime);
-    gain.gain.linearRampToValueAtTime(0.4, ac.currentTime + 0.02);
+    gain.gain.linearRampToValueAtTime(0.7, ac.currentTime + 0.02);
     osc.connect(gain);
     gain.connect(ac.destination);
     osc.start();
