@@ -11,271 +11,463 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     html, body {
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       overflow: hidden;
       background: #000;
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
     }
 
-    canvas {
+    /* ── Canvas ── */
+    #c {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       position: fixed;
       top: 0; left: 0;
     }
 
-    /* Prevent any tap highlights or callouts */
-    * {
-      -webkit-tap-highlight-color: transparent;
-      -webkit-touch-callout: none;
+    /* ── Piano view ── */
+    #piano-view {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #111;
+      align-items: center;
+      justify-content: center;
     }
+    #piano-view.active { display: flex; }
+
+    #piano {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      width: 100%;
+      padding: 0 10px;
+      height: 58vh;
+    }
+
+    .white-key {
+      flex: 1;
+      height: 100%;
+      background: #f0f0f0;
+      border: 2px solid #444;
+      border-radius: 0 0 12px 12px;
+      margin: 0 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 16px;
+      transition: background 0.04s, box-shadow 0.04s;
+    }
+
+    .white-key .note-label {
+      font-size: 15px;
+      font-weight: 700;
+      color: rgba(0,0,0,0.3);
+      font-family: 'Helvetica Neue', sans-serif;
+      pointer-events: none;
+    }
+
+    /* ── Menu button ── */
+    #menu-btn {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1000;
+      width: 46px; height: 46px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 22px;
+      color: #fff;
+    }
+
+    /* ── Dropdown ── */
+    #menu-dropdown {
+      position: fixed;
+      top: 70px;
+      right: 16px;
+      z-index: 1000;
+      background: rgba(25,25,25,0.94);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      overflow: hidden;
+      display: none;
+      min-width: 175px;
+    }
+    #menu-dropdown.open { display: block; }
+
+    .menu-item {
+      padding: 15px 20px;
+      color: #fff;
+      font-family: 'Helvetica Neue', sans-serif;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .menu-item:last-child { border-bottom: none; }
+    .menu-item:active { background: rgba(255,255,255,0.1); }
+    .menu-item.selected { color: #FFD700; }
+    .menu-item .icon { font-size: 18px; }
   </style>
 </head>
 <body>
+
   <canvas id="c"></canvas>
 
+  <div id="piano-view">
+    <div id="piano"></div>
+  </div>
+
+  <div id="menu-btn">☰</div>
+
+  <div id="menu-dropdown">
+    <div class="menu-item selected" data-view="splash">
+      <span class="icon">🎨</span> Color Splash
+    </div>
+    <div class="menu-item" data-view="piano">
+      <span class="icon">🎹</span> Piano
+    </div>
+  </div>
+
   <script>
-    const canvas = document.getElementById('c');
-    const ctx = canvas.getContext('2d');
+  // ════════════════════════════════════════
+  //  MENU
+  // ════════════════════════════════════════
+  const menuBtn = document.getElementById('menu-btn');
+  const menuDropdown = document.getElementById('menu-dropdown');
+  let currentView = 'splash';
 
-    let W, H;
+  menuBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    menuDropdown.classList.toggle('open');
+  });
 
-    function resize() {
-      W = canvas.width = window.innerWidth;
-      H = canvas.height = window.innerHeight;
+  // Close dropdown on tap outside
+  document.addEventListener('touchstart', e => {
+    if (!menuBtn.contains(e.target) && !menuDropdown.contains(e.target)) {
+      menuDropdown.classList.remove('open');
     }
-    resize();
-    window.addEventListener('resize', resize);
+  }, { passive: true });
 
-    // ── Palette ──────────────────────────────────────────────
-    const COLORS = [
-      '#FF3366', '#FF6B35', '#FFD700', '#00FF88',
-      '#00CFFF', '#7B2FFF', '#FF2FD4', '#FF8C00',
-      '#39FF14', '#FF073A', '#0FF0FC', '#FF6EC7'
-    ];
+  document.querySelectorAll('.menu-item').forEach(item => {
+    item.addEventListener('click', () => {
+      switchView(item.dataset.view);
+      menuDropdown.classList.remove('open');
+      document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+    });
+  });
 
-    function randColor() {
-      return COLORS[Math.floor(Math.random() * COLORS.length)];
+  function switchView(view) {
+    currentView = view;
+    const pianoView = document.getElementById('piano-view');
+    const c = document.getElementById('c');
+    if (view === 'piano') {
+      c.style.display = 'none';
+      pianoView.classList.add('active');
+    } else {
+      c.style.display = 'block';
+      pianoView.classList.remove('active');
     }
+  }
 
-    // ── Flowing streams ──────────────────────────────────────
-    class Stream {
-      constructor() { this.reset(true); }
+  // ════════════════════════════════════════
+  //  COLOR SPLASH
+  // ════════════════════════════════════════
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W, H;
 
-      reset(init = false) {
-        this.x = Math.random() * W;
-        this.y = init ? Math.random() * H : (Math.random() < 0.5 ? -20 : H + 20);
-        this.vx = (Math.random() - 0.5) * 1.5;
-        this.vy = (Math.random() - 0.5) * 1.5;
-        // ensure it's actually moving
-        if (Math.abs(this.vy) < 0.3) this.vy = 0.3 * Math.sign(this.vy || 1);
-        this.color = randColor();
-        this.width = 3 + Math.random() * 8;
-        this.length = 80 + Math.random() * 200;
-        this.alpha = 0.4 + Math.random() * 0.5;
-        this.history = [];
-        this.maxHistory = Math.floor(this.length / 2);
-        this.wobble = Math.random() * Math.PI * 2;
-        this.wobbleSpeed = 0.02 + Math.random() * 0.03;
-        this.wobbleAmp = 0.3 + Math.random() * 0.8;
-      }
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
 
-      update() {
-        this.wobble += this.wobbleSpeed;
-        this.vx += Math.sin(this.wobble) * this.wobbleAmp * 0.05;
-        this.vy += Math.cos(this.wobble * 0.7) * this.wobbleAmp * 0.05;
+  const COLORS = [
+    '#FF3366','#FF6B35','#FFD700','#00FF88',
+    '#00CFFF','#7B2FFF','#FF2FD4','#FF8C00',
+    '#39FF14','#FF073A','#0FF0FC','#FF6EC7'
+  ];
+  function randColor() { return COLORS[Math.floor(Math.random() * COLORS.length)]; }
 
-        // soft speed cap
-        const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-        if (speed > 2.5) { this.vx *= 2.5 / speed; this.vy *= 2.5 / speed; }
-
-        this.x += this.vx;
-        this.y += this.vy;
-
-        this.history.push({ x: this.x, y: this.y });
-        if (this.history.length > this.maxHistory) this.history.shift();
-
-        // reset if far off screen
-        if (this.x < -200 || this.x > W + 200 || this.y < -200 || this.y > H + 200) {
-          this.reset();
-        }
-      }
-
-      draw() {
-        if (this.history.length < 2) return;
-        ctx.beginPath();
-        ctx.moveTo(this.history[0].x, this.history[0].y);
-        for (let i = 1; i < this.history.length; i++) {
-          ctx.lineTo(this.history[i].x, this.history[i].y);
-        }
-        ctx.strokeStyle = this.color;
-        ctx.lineWidth = this.width;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.globalAlpha = this.alpha;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = this.width * 2;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
-      }
+  class Stream {
+    constructor() { this.reset(true); }
+    reset(init = false) {
+      this.x = Math.random() * W;
+      this.y = init ? Math.random() * H : (Math.random() < 0.5 ? -20 : H + 20);
+      this.vx = (Math.random() - 0.5) * 1.5;
+      this.vy = (Math.random() - 0.5) * 1.5;
+      if (Math.abs(this.vy) < 0.3) this.vy = 0.3 * Math.sign(this.vy || 1);
+      this.color = randColor();
+      this.width = 3 + Math.random() * 8;
+      this.length = 80 + Math.random() * 200;
+      this.alpha = 0.4 + Math.random() * 0.5;
+      this.history = [];
+      this.maxHistory = Math.floor(this.length / 2);
+      this.wobble = Math.random() * Math.PI * 2;
+      this.wobbleSpeed = 0.02 + Math.random() * 0.03;
+      this.wobbleAmp = 0.3 + Math.random() * 0.8;
     }
-
-    // ── Particles (touch burst) ───────────────────────────────
-    class Particle {
-      constructor(x, y, color) {
-        this.x = x; this.y = y;
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 2 + Math.random() * 5;
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
-        this.color = color;
-        this.alpha = 1;
-        this.size = 2 + Math.random() * 6;
-        this.decay = 0.015 + Math.random() * 0.025;
-        this.gravity = 0.15 + Math.random() * 0.1;
-        this.shape = Math.random() < 0.5 ? 'circle' : 'star';
-      }
-
-      update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.vy += this.gravity;
-        this.vx *= 0.98;
-        this.alpha -= this.decay;
-        this.size *= 0.99;
-      }
-
-      draw() {
-        ctx.globalAlpha = Math.max(0, this.alpha);
-        ctx.fillStyle = this.color;
-
-        if (this.shape === 'circle') {
-          ctx.beginPath();
-          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          drawStar(ctx, this.x, this.y, 5, this.size, this.size * 0.45);
-        }
-
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
-      }
-
-      dead() { return this.alpha <= 0; }
+    update() {
+      this.wobble += this.wobbleSpeed;
+      this.vx += Math.sin(this.wobble) * this.wobbleAmp * 0.05;
+      this.vy += Math.cos(this.wobble * 0.7) * this.wobbleAmp * 0.05;
+      const spd = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
+      if (spd > 2.5) { this.vx *= 2.5/spd; this.vy *= 2.5/spd; }
+      this.x += this.vx; this.y += this.vy;
+      this.history.push({ x: this.x, y: this.y });
+      if (this.history.length > this.maxHistory) this.history.shift();
+      if (this.x < -200 || this.x > W+200 || this.y < -200 || this.y > H+200) this.reset();
     }
-
-    // ── Ring burst ────────────────────────────────────────────
-    class Ring {
-      constructor(x, y, color) {
-        this.x = x; this.y = y;
-        this.color = color;
-        this.radius = 10;
-        this.maxRadius = 80 + Math.random() * 100;
-        this.alpha = 0.8;
-        this.width = 3 + Math.random() * 4;
-      }
-      update() {
-        this.radius += (this.maxRadius - this.radius) * 0.12;
-        this.alpha -= 0.025;
-      }
-      draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = this.color;
-        ctx.lineWidth = this.width;
-        ctx.globalAlpha = Math.max(0, this.alpha);
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 15;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
-      }
-      dead() { return this.alpha <= 0; }
-    }
-
-    function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
-      let rot = (Math.PI / 2) * 3;
-      const step = Math.PI / spikes;
+    draw() {
+      if (this.history.length < 2) return;
       ctx.beginPath();
-      ctx.moveTo(cx, cy - outerR);
-      for (let i = 0; i < spikes; i++) {
-        ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
-        rot += step;
-        ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
-        rot += step;
-      }
-      ctx.lineTo(cx, cy - outerR);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(this.history[0].x, this.history[0].y);
+      for (let i = 1; i < this.history.length; i++) ctx.lineTo(this.history[i].x, this.history[i].y);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = this.width;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.globalAlpha = this.alpha;
+      ctx.shadowColor = this.color; ctx.shadowBlur = this.width * 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
     }
+  }
 
-    // ── Setup ─────────────────────────────────────────────────
-    const NUM_STREAMS = 18;
-    const streams = Array.from({ length: NUM_STREAMS }, () => new Stream());
-    let particles = [];
-    let rings = [];
-
-    function burst(x, y) {
-      const color = randColor();
-      const count = 12 + Math.floor(Math.random() * 8);
-      for (let i = 0; i < count; i++) {
-        particles.push(new Particle(x, y, i % 3 === 0 ? randColor() : color));
-      }
-      // 2-3 expanding rings
-      const numRings = 2 + Math.floor(Math.random() * 2);
-      for (let i = 0; i < numRings; i++) {
-        rings.push(new Ring(x, y, i === 0 ? color : randColor()));
-      }
+  class Particle {
+    constructor(x, y, color) {
+      this.x = x; this.y = y;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 5;
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed;
+      this.color = color; this.alpha = 1;
+      this.size = 2 + Math.random() * 6;
+      this.decay = 0.015 + Math.random() * 0.025;
+      this.gravity = 0.15 + Math.random() * 0.1;
+      this.shape = Math.random() < 0.5 ? 'circle' : 'star';
     }
-
-    // ── Touch / mouse input ───────────────────────────────────
-    function handleTouch(e) {
-      e.preventDefault();
-      const touches = e.changedTouches || [e];
-      for (const t of touches) {
-        const rect = canvas.getBoundingClientRect();
-        burst(t.clientX - rect.left, t.clientY - rect.top);
-      }
+    update() {
+      this.x += this.vx; this.y += this.vy;
+      this.vy += this.gravity; this.vx *= 0.98;
+      this.alpha -= this.decay; this.size *= 0.99;
     }
-
-    canvas.addEventListener('touchstart', handleTouch, { passive: false });
-    canvas.addEventListener('touchmove', handleTouch, { passive: false });
-    canvas.addEventListener('mousedown', handleTouch);
-    canvas.addEventListener('mousemove', (e) => { if (e.buttons) handleTouch(e); });
-
-    // Block context menu and double-tap zoom
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('dblclick', e => e.preventDefault());
-
-    // ── Render loop ───────────────────────────────────────────
-    function loop() {
-      // Fading trail (not full clear = motion blur effect)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
-      ctx.fillRect(0, 0, W, H);
-
-      // Draw streams
-      for (const s of streams) {
-        s.update();
-        s.draw();
+    draw() {
+      ctx.globalAlpha = Math.max(0, this.alpha);
+      ctx.fillStyle = this.color;
+      if (this.shape === 'circle') {
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill();
+      } else {
+        drawStar(ctx, this.x, this.y, 5, this.size, this.size * 0.45);
       }
-
-      // Draw rings
-      rings = rings.filter(r => !r.dead());
-      for (const r of rings) { r.update(); r.draw(); }
-
-      // Draw particles
-      particles = particles.filter(p => !p.dead());
-      for (const p of particles) { p.update(); p.draw(); }
-
-      requestAnimationFrame(loop);
+      ctx.globalAlpha = 1;
     }
+    dead() { return this.alpha <= 0; }
+  }
 
-    loop();
+  class Ring {
+    constructor(x, y, color) {
+      this.x = x; this.y = y; this.color = color;
+      this.radius = 10; this.maxRadius = 80 + Math.random() * 100;
+      this.alpha = 0.8; this.width = 3 + Math.random() * 4;
+    }
+    update() {
+      this.radius += (this.maxRadius - this.radius) * 0.12;
+      this.alpha -= 0.025;
+    }
+    draw() {
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+      ctx.strokeStyle = this.color; ctx.lineWidth = this.width;
+      ctx.globalAlpha = Math.max(0, this.alpha);
+      ctx.shadowColor = this.color; ctx.shadowBlur = 15;
+      ctx.stroke(); ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    }
+    dead() { return this.alpha <= 0; }
+  }
+
+  function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
+    let rot = (Math.PI/2)*3;
+    const step = Math.PI/spikes;
+    ctx.beginPath(); ctx.moveTo(cx, cy - outerR);
+    for (let i = 0; i < spikes; i++) {
+      ctx.lineTo(cx + Math.cos(rot)*outerR, cy + Math.sin(rot)*outerR); rot += step;
+      ctx.lineTo(cx + Math.cos(rot)*innerR, cy + Math.sin(rot)*innerR); rot += step;
+    }
+    ctx.lineTo(cx, cy - outerR); ctx.closePath(); ctx.fill();
+  }
+
+  const streams = Array.from({ length: 18 }, () => new Stream());
+  let particles = [], rings = [];
+
+  function burst(x, y) {
+    const color = randColor();
+    const count = 12 + Math.floor(Math.random() * 8);
+    for (let i = 0; i < count; i++) particles.push(new Particle(x, y, i%3===0 ? randColor() : color));
+    const numRings = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < numRings; i++) rings.push(new Ring(x, y, i===0 ? color : randColor()));
+  }
+
+  function handleSplashTouch(e) {
+    if (currentView !== 'splash') return;
+    e.preventDefault();
+    const touches = e.changedTouches || [e];
+    for (const t of touches) {
+      const rect = canvas.getBoundingClientRect();
+      // Don't burst if touching the menu area
+      if (t.clientX > W - 80 && t.clientY < 80) return;
+      burst(t.clientX - rect.left, t.clientY - rect.top);
+    }
+  }
+
+  canvas.addEventListener('touchstart', handleSplashTouch, { passive: false });
+  canvas.addEventListener('touchmove', handleSplashTouch, { passive: false });
+  canvas.addEventListener('mousedown', handleSplashTouch);
+  canvas.addEventListener('mousemove', e => { if (e.buttons) handleSplashTouch(e); });
+
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('dblclick', e => e.preventDefault());
+
+  function loop() {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(0, 0, W, H);
+    for (const s of streams) { s.update(); s.draw(); }
+    rings = rings.filter(r => !r.dead());
+    for (const r of rings) { r.update(); r.draw(); }
+    particles = particles.filter(p => !p.dead());
+    for (const p of particles) { p.update(); p.draw(); }
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // ════════════════════════════════════════
+  //  PIANO
+  // ════════════════════════════════════════
+
+  // C D E F G A B C  (one octave)
+  const NOTES = [
+    { label: 'C', freq: 261.63, color: '#FF3366' },
+    { label: 'D', freq: 293.66, color: '#FF8C00' },
+    { label: 'E', freq: 329.63, color: '#FFD700' },
+    { label: 'F', freq: 349.23, color: '#00FF88' },
+    { label: 'G', freq: 392.00, color: '#00CFFF' },
+    { label: 'A', freq: 440.00, color: '#7B2FFF' },
+    { label: 'B', freq: 493.88, color: '#FF2FD4' },
+    { label: 'C', freq: 523.25, color: '#FF3366' },
+  ];
+
+  // Audio context — created lazily on first touch (iOS requires user gesture)
+  let audioCtx = null;
+  function getAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Resume if suspended (iOS sometimes suspends it)
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  // Active notes: pointerId → { osc, gain }
+  const activeNotes = new Map();
+
+  function playNote(freq, id) {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    gain.gain.setValueAtTime(0, ac.currentTime);
+    gain.gain.linearRampToValueAtTime(0.4, ac.currentTime + 0.02);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start();
+    activeNotes.set(id, { osc, gain });
+  }
+
+  function stopNote(id) {
+    const entry = activeNotes.get(id);
+    if (!entry) return;
+    const { osc, gain } = entry;
+    const ac = getAudio();
+    gain.gain.setValueAtTime(gain.gain.value, ac.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ac.currentTime + 0.18);
+    osc.stop(ac.currentTime + 0.18);
+    activeNotes.delete(id);
+  }
+
+  // Build keys
+  const pianoEl = document.getElementById('piano');
+  NOTES.forEach((n, i) => {
+    const key = document.createElement('div');
+    key.className = 'white-key';
+    key.dataset.index = i;
+    key.innerHTML = `<span class="note-label">${n.label}</span>`;
+    pianoEl.appendChild(key);
+  });
+
+  // Track which key each pointer is on
+  const pointerKeys = new Map();
+
+  function keyDown(keyEl, pointerId) {
+    if (pointerKeys.has(pointerId) && pointerKeys.get(pointerId) === keyEl) return;
+    keyUp(pointerId); // release previous if sliding
+    const i = parseInt(keyEl.dataset.index);
+    const n = NOTES[i];
+    keyEl.style.background = n.color;
+    keyEl.style.boxShadow = `0 0 30px ${n.color}, 0 0 10px ${n.color}`;
+    keyEl.querySelector('.note-label').style.color = 'rgba(255,255,255,0.7)';
+    playNote(n.freq, pointerId);
+    pointerKeys.set(pointerId, keyEl);
+  }
+
+  function keyUp(pointerId) {
+    const keyEl = pointerKeys.get(pointerId);
+    if (!keyEl) return;
+    keyEl.style.background = '';
+    keyEl.style.boxShadow = '';
+    keyEl.querySelector('.note-label').style.color = '';
+    stopNote(pointerId);
+    pointerKeys.delete(pointerId);
+  }
+
+  pianoEl.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const key = e.target.closest('.white-key');
+    if (!key) return;
+    pianoEl.setPointerCapture(e.pointerId);
+    keyDown(key, e.pointerId);
+  });
+
+  pianoEl.addEventListener('pointermove', e => {
+    e.preventDefault();
+    if (!pointerKeys.has(e.pointerId)) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const key = el && el.closest('.white-key');
+    if (key && key !== pointerKeys.get(e.pointerId)) {
+      keyDown(key, e.pointerId);
+    }
+  });
+
+  pianoEl.addEventListener('pointerup', e => keyUp(e.pointerId));
+  pianoEl.addEventListener('pointercancel', e => keyUp(e.pointerId));
+
   </script>
 </body>
 </html>
