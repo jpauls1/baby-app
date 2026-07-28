@@ -74,6 +74,70 @@
       pointer-events: none;
     }
 
+    /* ── Animals view ── */
+    #animals-view {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #111;
+      align-items: center;
+      justify-content: center;
+    }
+    #animals-view.active { display: flex; }
+
+    .animal-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 14px;
+      width: 100%;
+      height: 100%;
+      padding: calc(env(safe-area-inset-top) + 74px) 16px 24px;
+    }
+
+    @media (max-width: 600px) {
+      .animal-grid {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+      }
+    }
+
+    .animal-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.06);
+      border: 3px solid rgba(255,255,255,0.15);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+    }
+
+    .animal-card .emoji {
+      font-size: clamp(44px, 11vw, 100px);
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .animal-card .name {
+      margin-top: 8px;
+      font-family: 'Helvetica Neue', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      color: rgba(255,255,255,0.5);
+      pointer-events: none;
+    }
+
+    .animal-card.active {
+      transform: scale(1.08);
+      background: var(--card-color);
+      border-color: #fff;
+      box-shadow: 0 0 40px var(--card-color), 0 0 15px var(--card-color);
+    }
+    .animal-card.active .name { color: rgba(255,255,255,0.9); }
+
     /* ── Menu button ── */
     #menu-btn {
       position: fixed;
@@ -136,6 +200,10 @@
     <div id="piano"></div>
   </div>
 
+  <div id="animals-view">
+    <div id="animal-grid" class="animal-grid"></div>
+  </div>
+
   <div id="menu-btn">☰</div>
 
   <div id="menu-dropdown">
@@ -144,6 +212,9 @@
     </div>
     <div class="menu-item" data-view="piano">
       <span class="icon">🎹</span> Piano
+    </div>
+    <div class="menu-item" data-view="animals">
+      <span class="icon">🐾</span> Animals
     </div>
   </div>
 
@@ -179,14 +250,11 @@
   function switchView(view) {
     currentView = view;
     const pianoView = document.getElementById('piano-view');
+    const animalsView = document.getElementById('animals-view');
     const c = document.getElementById('c');
-    if (view === 'piano') {
-      c.style.display = 'none';
-      pianoView.classList.add('active');
-    } else {
-      c.style.display = 'block';
-      pianoView.classList.remove('active');
-    }
+    c.style.display = view === 'splash' ? 'block' : 'none';
+    pianoView.classList.toggle('active', view === 'piano');
+    animalsView.classList.toggle('active', view === 'animals');
   }
 
   // ════════════════════════════════════════
@@ -476,6 +544,55 @@
 
   pianoEl.addEventListener('pointerup', e => keyUp(e.pointerId));
   pianoEl.addEventListener('pointercancel', e => keyUp(e.pointerId));
+
+  // ════════════════════════════════════════
+  //  ANIMALS
+  // ════════════════════════════════════════
+  const ANIMALS = [
+    { emoji: '🐄', name: 'Cow',   file: 'sounds/cow.mp3',   color: '#FF3366' },
+    { emoji: '🐶', name: 'Dog',   file: 'sounds/dog.mp3',   color: '#FF8C00' },
+    { emoji: '🐱', name: 'Cat',   file: 'sounds/cat.mp3',   color: '#FFD700' },
+    { emoji: '🐷', name: 'Pig',   file: 'sounds/pig.mp3',   color: '#00FF88' },
+    { emoji: '🦆', name: 'Duck',  file: 'sounds/duck.mp3',  color: '#00CFFF' },
+    { emoji: '🦁', name: 'Lion',  file: 'sounds/lion.mp3',  color: '#7B2FFF' },
+    { emoji: '🐴', name: 'Horse', file: 'sounds/horse.mp3', color: '#FF2FD4' },
+    { emoji: '🐑', name: 'Sheep', file: 'sounds/sheep.mp3', color: '#39FF14' },
+  ];
+
+  const animalGridEl = document.getElementById('animal-grid');
+  ANIMALS.forEach((a, i) => {
+    const card = document.createElement('div');
+    card.className = 'animal-card';
+    card.dataset.index = i;
+    card.style.setProperty('--card-color', a.color);
+    card.innerHTML = `<span class="emoji">${a.emoji}</span><span class="name">${a.name}</span>`;
+    animalGridEl.appendChild(card);
+    a.audio = new Audio(a.file);
+    a.audio.preload = 'auto';
+  });
+
+  function playAnimalSound(a) {
+    a.audio.pause();
+    a.audio.currentTime = 0;
+    a.audio.play();
+  }
+
+  let animalResetTimer = null;
+  function activateAnimal(card) {
+    const a = ANIMALS[parseInt(card.dataset.index)];
+    document.querySelectorAll('.animal-card.active').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    playAnimalSound(a);
+    clearTimeout(animalResetTimer);
+    animalResetTimer = setTimeout(() => card.classList.remove('active'), 700);
+  }
+
+  animalGridEl.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const card = e.target.closest('.animal-card');
+    if (!card) return;
+    activateAnimal(card);
+  });
 
   </script>
 </body>
