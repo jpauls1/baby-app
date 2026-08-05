@@ -215,14 +215,16 @@ export class Ring {
 export function burst(particles, rings, x, y) {
   const color = randColor();
   if (particles.length < MAX_PARTICLES) {
-    const count = 12 + Math.floor(Math.random() * 8);
+    const wanted = 12 + Math.floor(Math.random() * 8);
+    const count = Math.min(wanted, MAX_PARTICLES - particles.length);
     for (let i = 0; i < count; i++) {
       const particleColor = i % 3 === 0 ? randColor() : color;
       particles.push(new Particle(x, y, particleColor));
     }
   }
   if (rings.length < MAX_RINGS) {
-    const numRings = 2 + Math.floor(Math.random() * 2);
+    const wanted = 2 + Math.floor(Math.random() * 2);
+    const numRings = Math.min(wanted, MAX_RINGS - rings.length);
     for (let i = 0; i < numRings; i++) {
       rings.push(new Ring(x, y, i === 0 ? color : randColor()));
     }
