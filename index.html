@@ -333,11 +333,8 @@
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.globalAlpha = this.alpha;
-      ctx.shadowColor = this.color;
-      ctx.shadowBlur = this.width * 2;
       ctx.stroke();
       ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
     }
   }
 
@@ -434,16 +431,25 @@
   let particles = [];
   let rings = [];
 
+  const MAX_PARTICLES = 300;
+  const MAX_RINGS = 30;
+  const BURST_THROTTLE_MS = 80;
+  const lastBurstTime = new Map();
+
   function burst(x, y) {
     const color = randColor();
-    const count = 12 + Math.floor(Math.random() * 8);
-    for (let i = 0; i < count; i++) {
-      const particleColor = i % 3 === 0 ? randColor() : color;
-      particles.push(new Particle(x, y, particleColor));
+    if (particles.length < MAX_PARTICLES) {
+      const count = 12 + Math.floor(Math.random() * 8);
+      for (let i = 0; i < count; i++) {
+        const particleColor = i % 3 === 0 ? randColor() : color;
+        particles.push(new Particle(x, y, particleColor));
+      }
     }
-    const numRings = 2 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < numRings; i++) {
-      rings.push(new Ring(x, y, i === 0 ? color : randColor()));
+    if (rings.length < MAX_RINGS) {
+      const numRings = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < numRings; i++) {
+        rings.push(new Ring(x, y, i === 0 ? color : randColor()));
+      }
     }
   }
 
@@ -451,10 +457,14 @@
     if (currentView !== 'splash') return;
     e.preventDefault();
     const touches = e.changedTouches || [e];
+    const now = Date.now();
     for (const t of touches) {
+      const id = t.identifier ?? 'mouse';
+      if (now - (lastBurstTime.get(id) ?? 0) < BURST_THROTTLE_MS) continue;
+      lastBurstTime.set(id, now);
       const rect = canvas.getBoundingClientRect();
       // Don't burst if touching the menu area
-      if (t.clientX > canvasW - 80 && t.clientY < 80) return;
+      if (t.clientX > canvasW - 80 && t.clientY < 80) continue;
       burst(t.clientX - rect.left, t.clientY - rect.top);
     }
   }
