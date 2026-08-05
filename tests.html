@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Baby Play — Tests</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      padding: 24px;
+      max-width: 700px;
+    }
+    h1 { color: #FFD700; margin-bottom: 8px; font-size: 20px; }
+    .subtitle { color: #666; font-size: 13px; margin-bottom: 28px; }
+    .suite { margin-bottom: 20px; }
+    .suite-name { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #555; margin-bottom: 6px; }
+    .result { padding: 5px 10px; border-radius: 5px; margin: 3px 0; font-size: 13px; }
+    .pass { background: rgba(0,255,136,0.08); color: #00FF88; }
+    .fail { background: rgba(255,51,102,0.12); color: #FF3366; }
+    #summary {
+      margin-top: 28px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+    }
+    .summary-pass { background: rgba(0,255,136,0.1); color: #00FF88; }
+    .summary-fail { background: rgba(255,51,102,0.12); color: #FF3366; }
+  </style>
+</head>
+<body>
+  <h1>Baby Play — Test Suite</h1>
+  <p class="subtitle">Must be served over HTTP (not file://) for ES module imports to work.</p>
+  <div id="output"></div>
+  <div id="summary"></div>
+
+  <script type="module">
+  import {
+    COLORS, MAX_PARTICLES, MAX_RINGS, BURST_THROTTLE_MS,
+    randColor, Stream, Particle, Ring, burst, setCanvasDimensions,
+  } from './app.js';
+
+  // ── Minimal test runner ──────────────────────────────────────────
+
+  let passed = 0;
+  let failed = 0;
+  let currentSuiteEl = null;
+  const output = document.getElementById('output');
+
+  function suite(name) {
+    currentSuiteEl = document.createElement('div');
+    currentSuiteEl.className = 'suite';
+    currentSuiteEl.innerHTML = `<div class="suite-name">${name}</div>`;
+    output.appendChild(currentSuiteEl);
+  }
+
+  function assert(condition, description) {
+    const el = document.createElement('div');
+    el.className = `result ${condition ? 'pass' : 'fail'}`;
+    el.textContent = `${condition ? '✓' : '✗'} ${description}`;
+    currentSuiteEl.appendChild(el);
+    condition ? passed++ : failed++;
+  }
+
+  // ── Setup ────────────────────────────────────────────────────────
+  // Stream.reset() uses module-level canvasW/canvasH — initialise before instantiating
+  setCanvasDimensions(800, 600);
+
+
+  // ════════════════════════════════════════
+  //  randColor()
+  // ════════════════════════════════════════
+  suite('randColor()');
+  {
+    const samples = Array.from({ length: 100 }, () => randColor());
+
+    assert(
+      samples.every(c => COLORS.includes(c)),
+      'every result is a member of the COLORS palette'
+    );
+    assert(
+      new Set(samples).size > 1,
+      'returns different colours across multiple calls (not always the same)'
+    );
+  }
+
+
+  // ════════════════════════════════════════
+  //  Particle
+  // ════════════════════════════════════════
+  suite('Particle');
+  {
+    const p = new Particle(100, 200, '#FF3366');
+
+    assert(p.alpha === 1, 'starts with alpha = 1');
+    assert(p.dead() === false, 'not dead on creation');
+
+    // Tick until dead, with a safety limit
+    let ticks = 0;
+    while (!p.dead() && ticks < 10_000) { p.update(); ticks++; }
+
+    assert(p.dead() === true, 'dead() returns true once alpha decays to 0');
+    assert(ticks < 10_000, `alpha reaches 0 in finite steps (took ${ticks})`);
+
+    // Stays dead — alpha only goes further negative
+    p.update();
+    assert(p.dead() === true, 'remains dead after additional updates');
+  }
+
+
+  // ════════════════════════════════════════
+  //  Ring
+  // ════════════════════════════════════════
+  suite('Ring');
+  {
+    const r = new Ring(400, 300, '#00FF88');
+
+    assert(r.alpha === 0.8, 'starts with alpha = 0.8');
+    assert(r.radius === 10, 'starts with radius = 10');
+    assert(r.dead() === false, 'not dead on creation');
+
+    let ticks = 0;
+    while (!r.dead() && ticks < 10_000) { r.update(); ticks++; }
+
+    assert(r.dead() === true, 'dead() returns true once alpha decays to 0');
+    assert(ticks < 10_000, `alpha reaches 0 in finite steps (took ${ticks})`);
+    assert(r.radius > 10, 'radius grew toward maxRadius before dying');
+  }
+
+
+  // ════════════════════════════════════════
+  //  Stream.reset()
+  // ════════════════════════════════════════
+  suite('Stream — property ranges after reset()');
+  {
+    // Run many resets and verify all properties land within documented ranges
+    let allXInRange = true;
+    let allAlphaInRange = true;
+    let allWidthInRange = true;
+    let allVyValid = true;
+    let allHistoryEmpty = true;
+    let allWobbleSpeedInRange = true;
+
+    for (let i = 0; i < 200; i++) {
+      const s = new Stream();
+      if (!(s.x >= 0 && s.x <= 800))          allXInRange = false;
+      if (!(s.alpha >= 0.4 && s.alpha <= 0.9)) allAlphaInRange = false;
+      if (!(s.width >= 3 && s.width <= 11))    allWidthInRange = false;
+      if (!(Math.abs(s.vy) >= 0.3))            allVyValid = false;
+      if (s.history.length !== 0)              allHistoryEmpty = false;
+      if (!(s.wobbleSpeed >= 0.02 && s.wobbleSpeed <= 0.05)) allWobbleSpeedInRange = false;
+    }
+
+    assert(allXInRange, 'x always within canvas width [0, 800] across 200 resets');
+    assert(allAlphaInRange, 'alpha always in [0.4, 0.9] across 200 resets');
+    assert(allWidthInRange, 'width always in [3, 11] across 200 resets');
+    assert(allVyValid, '|vy| >= 0.3 — minimum vertical speed always enforced');
+    assert(allHistoryEmpty, 'history always starts empty');
+    assert(allWobbleSpeedInRange, 'wobbleSpeed always in [0.02, 0.05]');
+  }
+
+  suite('Stream — out-of-bounds triggers reset');
+  {
+    const s = new Stream();
+
+    // Force stream far off-screen; update() should detect and reset
+    s.x = 9999;
+    s.y = 9999;
+    s.update();
+
+    assert(s.x !== 9999, 'x is reassigned after going out of bounds');
+    assert(s.x >= 0 && s.x <= 800, 'reset x lands within canvas width');
+    assert(s.history.length === 0, 'history is cleared on reset');
+  }
+
+
+  // ════════════════════════════════════════
+  //  burst() — cap enforcement
+  // ════════════════════════════════════════
+  suite('burst() — particle and ring caps');
+  {
+    const particles = [];
+    const rings = [];
+
+    // Call far more times than the caps allow
+    for (let i = 0; i < 100; i++) {
+      burst(particles, rings, 400, 300);
+    }
+
+    assert(
+      particles.length <= MAX_PARTICLES,
+      `particles capped at MAX_PARTICLES (${MAX_PARTICLES}) — got ${particles.length}`
+    );
+    assert(
+      rings.length <= MAX_RINGS,
+      `rings capped at MAX_RINGS (${MAX_RINGS}) — got ${rings.length}`
+    );
+    assert(particles.length > 0, 'particles array is non-empty after bursts');
+    assert(rings.length > 0, 'rings array is non-empty after bursts');
+  }
+
+  suite('burst() — caps hold when arrays are already full');
+  {
+    const particles = Array.from({ length: MAX_PARTICLES }, () => new Particle(0, 0, '#fff'));
+    const rings = Array.from({ length: MAX_RINGS }, () => new Ring(0, 0, '#fff'));
+
+    burst(particles, rings, 100, 100);
+
+    assert(
+      particles.length === MAX_PARTICLES,
+      'burst() does not push past MAX_PARTICLES when array is already at cap'
+    );
+    assert(
+      rings.length === MAX_RINGS,
+      'burst() does not push past MAX_RINGS when array is already at cap'
+    );
+  }
+
+
+  // ════════════════════════════════════════
+  //  Throttle logic
+  // ════════════════════════════════════════
+  suite('Burst throttle logic');
+  {
+    const throttleMap = new Map();
+    const now = Date.now();
+
+    // First touch for a pointer — no history → allowed
+    const isAllowedForNew = (now - (throttleMap.get('finger1') ?? 0)) >= BURST_THROTTLE_MS;
+    assert(isAllowedForNew, 'first touch on a new pointer is always allowed');
+
+    // Burst just happened — within throttle window → blocked
+    throttleMap.set('finger1', now);
+    const isBlockedWhenFresh = (now - (throttleMap.get('finger1') ?? 0)) < BURST_THROTTLE_MS;
+    assert(isBlockedWhenFresh, 'burst blocked when last burst was < BURST_THROTTLE_MS ago');
+
+    // Burst happened well in the past → allowed
+    throttleMap.set('finger2', now - BURST_THROTTLE_MS - 1);
+    const isAllowedWhenStale = (now - (throttleMap.get('finger2') ?? 0)) >= BURST_THROTTLE_MS;
+    assert(isAllowedWhenStale, 'burst allowed when last burst was >= BURST_THROTTLE_MS ago');
+
+    // Each pointer is throttled independently
+    throttleMap.set('finger3', now); // finger3 just fired
+    const finger4Allowed = (now - (throttleMap.get('finger4') ?? 0)) >= BURST_THROTTLE_MS;
+    assert(finger4Allowed, 'a different pointer is not blocked by another pointer\'s throttle');
+  }
+
+
+  // ── Summary ──────────────────────────────────────────────────────
+  const total = passed + failed;
+  const summaryEl = document.getElementById('summary');
+  summaryEl.className = `summary ${failed === 0 ? 'summary-pass' : 'summary-fail'}`;
+  summaryEl.textContent = failed === 0
+    ? `All ${total} tests passed`
+    : `${passed} / ${total} passed — ${failed} failed`;
+  </script>
+</body>
+</html>
